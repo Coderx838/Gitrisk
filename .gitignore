@@ -11,9 +11,9 @@ build/
 site-packages/
 
 # Virtual environments
-.venv/
-venv/
-env/
+/.venv/
+/venv/
+/env/
 
 # Environment files
 .env
