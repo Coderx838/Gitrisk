@@ -1,0 +1,1 @@
+﻿"""Dependencies scanner package."""

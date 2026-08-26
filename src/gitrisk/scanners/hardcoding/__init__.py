@@ -1,0 +1,1 @@
+﻿"""Hardcoding scanner package."""

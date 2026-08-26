@@ -1,0 +1,1 @@
+﻿"""Sensitive files scanner package."""

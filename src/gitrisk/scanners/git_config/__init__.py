@@ -1,0 +1,1 @@
+﻿"""Git config scanner package."""

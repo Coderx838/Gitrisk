@@ -1,0 +1,1 @@
+﻿"""Outdated dependencies scanner package."""

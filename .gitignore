@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+site-packages/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checking
+.mypy_cache/
+
+# GitRisk local data
+.gitrisk/
+*.gitrisk.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project planning / local docs
+*.pdf
+
+# Certificates & keys
+*.key
+*.pem
+*.p12
+*.pfx
