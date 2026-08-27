@@ -103,6 +103,7 @@ class GitHistoryScanner(BaseScanner):
                                 f"3. Force-push to all remotes and notify collaborators.\n"
                                 f"4. Assume the secret is compromised regardless of cleanup."
                             ),
+                            file=Path(current_file),
                             evidence=f"commit={current_commit} file={current_file} value={redacted}",
                             references=[
                                 "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository",

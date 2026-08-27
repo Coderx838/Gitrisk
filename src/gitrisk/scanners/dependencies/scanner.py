@@ -84,6 +84,7 @@ class DependencyScanner(BaseScanner):
             ))
             return findings
 
+        dep_index = 1
         manifest_files = self._find_manifests()
         for mfile, packages in manifest_files:
             for pkg_name, pkg_version in packages:
@@ -97,35 +98,47 @@ class DependencyScanner(BaseScanner):
                     all_fixed.extend(v.get("affected_versions", "").split(","))
                 safe_target = find_safe_version(pkg_name, pkg_version or "", all_fixed) or "2.34.2"
 
-                for vuln in vulns:
-                    dep_fix_fn = None
-                    if mfile.name.startswith("requirements") and pkg_version:
-                        def make_fixer(mf: Path, pn: str, pv: str, sv: str):
-                            return lambda rp: DependencyFixer(mf, pn, pv, sv).apply(rp)
-                        dep_fix_fn = make_fixer(mfile, pkg_name, pkg_version, safe_target)
+                # Deduplicate unique vulnerability IDs
+                unique_vuln_ids = list(dict.fromkeys(v.get("id", "") for v in vulns if v.get("id")))
+                count = len(unique_vuln_ids)
 
-                    findings.append(Finding(
-                        id=f"DEP-{vuln.get('id', 'UNKNOWN')[:8]}",
-                        scanner=self.name,
-                        title=f"Vulnerable dependency: {pkg_name}",
-                        description=(
-                            f"`{pkg_name}` version `{pkg_version or 'unknown'}` has a known vulnerability: "
-                            f"{vuln.get('summary', 'No description available.')}\n"
-                            f"CVE/ID: {vuln.get('id', 'N/A')}"
-                        ),
-                        severity=Severity.HIGH,
-                        fix_type=FixType.ASSISTED,
-                        remediation=(
-                            f"Upgrade {pkg_name} to a patched version. "
-                            f"Check https://osv.dev/vulnerability/{vuln.get('id', '')} for details."
-                        ),
-                        file=mfile,
-                        evidence=f"{pkg_name}=={pkg_version}",
-                        references=[
-                            f"https://osv.dev/vulnerability/{vuln.get('id', '')}",
-                        ],
-                        auto_fix=dep_fix_fn,
-                    ))
+                if count == 1:
+                    title = f"Vulnerable dependency: {pkg_name} ({unique_vuln_ids[0]})"
+                else:
+                    title = f"Vulnerable dependency: {pkg_name} ({count} vulnerabilities)"
+
+                desc_lines = [
+                    f"`{pkg_name}` version `{pkg_version or 'unknown'}` has {count} known vulnerability advisory(ies):"
+                ]
+                for v in vulns[:5]:
+                    vid = v.get("id", "N/A")
+                    sum_text = v.get("summary", "Security advisory")
+                    desc_lines.append(f"- {vid}: {sum_text}")
+                if count > 5:
+                    desc_lines.append(f"- ... and {count - 5} more advisories")
+
+                refs = [f"https://osv.dev/vulnerability/{vid}" for vid in unique_vuln_ids[:5]]
+
+                dep_fix_fn = None
+                if mfile.name.startswith("requirements") and pkg_version:
+                    def make_fixer(mf: Path, pn: str, pv: str, sv: str):
+                        return lambda rp: DependencyFixer(mf, pn, pv, sv).apply(rp)
+                    dep_fix_fn = make_fixer(mfile, pkg_name, pkg_version, safe_target)
+
+                findings.append(Finding(
+                    id=f"DEP-{dep_index:03d}",
+                    scanner=self.name,
+                    title=title,
+                    description="\n".join(desc_lines),
+                    severity=Severity.HIGH,
+                    fix_type=FixType.ASSISTED,
+                    remediation=f"Upgrade {pkg_name} to >={safe_target} to resolve all {count} vulnerabilities.",
+                    file=mfile,
+                    evidence=f"{pkg_name}=={pkg_version}",
+                    references=refs,
+                    auto_fix=dep_fix_fn,
+                ))
+                dep_index += 1
         return findings
 
     def _find_manifests(self) -> list[tuple[Path, list[tuple[str, Optional[str]]]]]:
