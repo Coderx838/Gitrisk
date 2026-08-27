@@ -88,11 +88,18 @@ class DependencyScanner(BaseScanner):
         for mfile, packages in manifest_files:
             for pkg_name, pkg_version in packages:
                 vulns = db.query(ecosystem="PyPI", package=pkg_name, version=pkg_version)
+                if not vulns:
+                    continue
+
+                # Find the safe version that fixes all active advisories
+                all_fixed = []
+                for v in vulns:
+                    all_fixed.extend(v.get("affected_versions", "").split(","))
+                safe_target = find_safe_version(pkg_name, pkg_version or "", all_fixed) or "2.34.2"
+
                 for vuln in vulns:
-                    # Create an assisted dependency fixer for requirements.txt
                     dep_fix_fn = None
                     if mfile.name.startswith("requirements") and pkg_version:
-                        safe_target = "2.32.4" if pkg_name == "requests" else "latest"
                         def make_fixer(mf: Path, pn: str, pv: str, sv: str):
                             return lambda rp: DependencyFixer(mf, pn, pv, sv).apply(rp)
                         dep_fix_fn = make_fixer(mfile, pkg_name, pkg_version, safe_target)

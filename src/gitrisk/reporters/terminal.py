@@ -13,6 +13,17 @@ from rich import box
 
 from gitrisk import __version__
 from gitrisk.core.models import ScanResults, Severity, Finding
+import sys
+
+
+def _supports_unicode() -> bool:
+    """Check if stdout can encode emojis and block characters."""
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        "📊█✓·→".encode(encoding)
+        return True
+    except Exception:
+        return False
 
 
 class TerminalReporter:
@@ -50,8 +61,9 @@ class TerminalReporter:
         self.console.print()
 
     def _print_findings(self, results: ScanResults) -> None:
+        check = "✓" if _supports_unicode() else "[OK]"
         if not results.findings:
-            self.console.print("[green bold]✓ No findings. Repository looks clean![/]")
+            self.console.print(f"[green bold]{check} No findings. Repository looks clean![/]")
             return
 
         table = Table(
@@ -97,6 +109,9 @@ class TerminalReporter:
         self.console.print()
 
     def _print_summary(self, results: ScanResults) -> None:
+        uni = _supports_unicode()
+        score_title = "📊 Score" if uni else ">> Score"
+        
         # Score panel
         score = results.overall_score
         if score >= 80:
@@ -109,14 +124,18 @@ class TerminalReporter:
         score_lines = [f"[{score_style}]GITRISK SCORE: {score}/100[/]\n"]
         for cs in sorted(results.category_scores, key=lambda c: c.name):
             bar_width = cs.score // 5  # 0-20 chars
-            bar = "█" * bar_width + "░" * (20 - bar_width)
             cs_style = "green" if cs.score >= 80 else ("yellow" if cs.score >= 60 else "red")
-            score_lines.append(f"  [bold]{cs.name:<14}[/] [{cs_style}]{cs.score:>3}/100[/]  [dim]{bar}[/]")
+            if uni:
+                bar = "█" * bar_width + "░" * (20 - bar_width)
+                score_lines.append(f"  [bold]{cs.name:<14}[/] [{cs_style}]{cs.score:>3}/100[/]  [dim]{bar}[/]")
+            else:
+                bar = "=" * bar_width + "-" * (20 - bar_width)
+                score_lines.append(f"  [bold]{cs.name:<14}[/] [{cs_style}]{cs.score:>3}/100[/]  [dim][{bar}][/]")
 
         self.console.print(
             Panel(
                 Text.from_markup("\n".join(score_lines)),
-                title="📊 Score",
+                title=score_title,
                 border_style=score_style.split()[0],
                 expand=False,
             )
@@ -140,16 +159,19 @@ class TerminalReporter:
         if low:
             parts.append(f"[green]{low} low[/]")
 
+        sep = " · " if uni else " | "
+        check = "✓" if uni else "[OK]"
         if parts:
-            summary = " · ".join(parts)
+            summary = sep.join(parts)
             self.console.print(f"  {total} finding(s): {summary}")
         else:
-            self.console.print(f"  [green]✓ {total} findings[/]")
+            self.console.print(f"  [green]{check} {total} findings[/]")
 
         # Safe fixes available
         fixable_count = sum(1 for f in results.findings if f.fix_type.value in ("AUTO", "SAFE", "ASSISTED"))
         if fixable_count:
-            self.console.print(f"  [green]{fixable_count} fix(es) can be applied automatically[/] — run [bold]gitrisk fix .[/bold]")
+            dash = "—" if uni else "-"
+            self.console.print(f"  [green]{fixable_count} fix(es) can be applied automatically[/] {dash} run [bold]gitrisk fix .[/bold]")
 
         elapsed = results.elapsed_seconds
         self.console.print(f"  [dim]Completed in {elapsed:.2f}s[/]")

@@ -46,19 +46,19 @@ def find_safe_version(
             continue
         candidates.append(v)
 
-    if not candidates:
-        # Allow latest across majors only if no same-major safe version exists
-        all_higher = []
-        for v_str in fixed_versions:
-            v = _parse_version_safe(v_str)
-            if v and v > cur:
-                all_higher.append(v)
-        if not all_higher:
-            return None
-        # Return the minimum higher version (least breaking)
-        return str(min(all_higher))
+    if candidates:
+        # Take the maximum candidates to ensure ALL active vulnerabilities are patched
+        return str(max(candidates))
 
-    return str(min(candidates))
+    # Allow latest across majors only if no same-major safe version exists
+    all_higher = []
+    for v_str in fixed_versions:
+        v = _parse_version_safe(v_str)
+        if v and v > cur:
+            all_higher.append(v)
+    if not all_higher:
+        return None
+    return str(max(all_higher))
 
 
 def get_pypi_latest(package: str) -> Optional[str]:

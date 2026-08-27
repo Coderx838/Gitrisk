@@ -56,8 +56,22 @@ def _collect_proposals(findings: list[Finding], repo_path: Path) -> list[FixProp
     return proposals
 
 
+def _supports_unicode() -> bool:
+    """Check if stdout can encode emojis and arrows."""
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        "✓→".encode(encoding)
+        return True
+    except Exception:
+        return False
+
+
 def _print_diff_preview(proposals: list[FixProposal], repo_path: Path) -> None:
     """Print the formatted fix preview."""
+    uni = _supports_unicode()
+    arrow = "→" if uni else "->"
+    check = "✓" if uni else "+"
+
     console.print()
     console.print(f"  [bold green]{len(proposals)} safe fix(es) available[/]\n")
 
@@ -67,12 +81,12 @@ def _print_diff_preview(proposals: list[FixProposal], repo_path: Path) -> None:
 
         if f.evidence and "==" in f.evidence:
             pkg, ver = f.evidence.split("==", 1)
-            target = "2.32.4" if pkg.strip().lower() == "requests" else "latest"
+            target = "2.34.2" if pkg.strip().lower() == "requests" else "latest"
             console.print(f"  [bold cyan][{i}][/] {fix_badge} [bold white]{pkg}[/]")
-            console.print(f"      [red]{ver}[/] → [green]{target}[/]")
+            console.print(f"      [red]{ver}[/] {arrow} [green]{target}[/]")
             if f.file:
                 console.print(f"      File: [dim]{f.file.name}[/]")
-            console.print(f"      [dim]✓ Safe dependency update[/]")
+            console.print(f"      [dim]{check} Safe dependency update[/]")
         else:
             console.print(f"  [bold cyan][{i}][/] {fix_badge} [bold white]{prop.summary}[/]")
             if f.file:
@@ -122,8 +136,13 @@ def fix_command(
     # Print preview
     _print_diff_preview(proposals, path)
 
+    uni = _supports_unicode()
+    dash = "—" if uni else "-"
+    check = "✓" if uni else "[OK]"
+    fail = "✗" if uni else "[FAIL]"
+
     if dry_run:
-        console.print("[dim]Dry run complete — no changes were applied.[/]")
+        console.print(f"[dim]Dry run complete {dash} no changes were applied.[/]")
         console.print()
         return
 
@@ -142,10 +161,10 @@ def fix_command(
         try:
             if prop.apply_fn:
                 prop.apply_fn(path)
-                console.print(f"  [green]✓[/] Applied: {prop.summary}")
+                console.print(f"  [green]{check}[/] Applied: {prop.summary}")
                 applied += 1
         except Exception as e:
-            console.print(f"  [red]✗[/] Failed: {prop.summary} ({e})")
+            console.print(f"  [red]{fail}[/] Failed: {prop.summary} ({e})")
             failed += 1
 
     console.print()

@@ -98,21 +98,54 @@ class DatabaseManager:
         if not self.is_available():
             return []
 
+        from packaging.version import Version, InvalidVersion
+
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
-            if version:
-                rows = conn.execute(
-                    "SELECT id, summary, details FROM vulns "
-                    "WHERE ecosystem=? AND package=? AND (affected_versions='*' OR affected_versions LIKE ?)",
-                    (ecosystem, package.lower(), f"%{version}%"),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT id, summary, details FROM vulns WHERE ecosystem=? AND package=?",
-                    (ecosystem, package.lower()),
-                ).fetchall()
-            return [dict(row) for row in rows]
+            rows = conn.execute(
+                "SELECT id, summary, details, affected_versions FROM vulns WHERE ecosystem=? AND package=?",
+                (ecosystem, package.lower()),
+            ).fetchall()
+
+            if not version:
+                return [dict(row) for row in rows]
+
+            # Semantic version matching against affected ranges
+            affected_results = []
+            try:
+                cur_v = Version(version)
+            except InvalidVersion:
+                cur_v = None
+
+            for row in rows:
+                aff_str = row["affected_versions"] or ""
+                if not aff_str or aff_str == "*":
+                    continue
+
+                tokens = [t.strip() for t in aff_str.split(",") if t.strip()]
+                
+                if cur_v is None:
+                    continue
+
+                # Check ranges (introduced, fixed)
+                is_vuln = False
+                for token in tokens:
+                    try:
+                        tok_v = Version(token)
+                        if tok_v > Version("0"):
+                            if cur_v < tok_v:
+                                is_vuln = True
+                            elif cur_v >= tok_v:
+                                is_vuln = False
+                                break
+                    except InvalidVersion:
+                        pass
+
+                if is_vuln:
+                    affected_results.append(dict(row))
+
+            return affected_results
         finally:
             conn.close()
 
