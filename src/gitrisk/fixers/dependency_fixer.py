@@ -91,7 +91,7 @@ class DependencyFixer:
         """Patch requirements.txt in-place."""
         content = self.req_file.read_text(encoding="utf-8", errors="ignore")
         pattern = re.compile(
-            rf"^({re.escape(self.package)})\s*==\s*{re.escape(self.current_version)}",
+            rf"^([ \t]*{re.escape(self.package)})[ \t]*([=><~]=?)[ \t]*{re.escape(self.current_version)}.*$",
             re.IGNORECASE | re.MULTILINE,
         )
         new_content = pattern.sub(
@@ -99,7 +99,17 @@ class DependencyFixer:
             content,
         )
         if new_content == content:
-            raise RuntimeError(f"Could not find {self.package}=={self.current_version} in {self.req_file}")
+            # Fallback pattern matching just the package name on its own line
+            fallback_pattern = re.compile(
+                rf"^([ \t]*{re.escape(self.package)})\b.*$",
+                re.IGNORECASE | re.MULTILINE,
+            )
+            new_content = fallback_pattern.sub(
+                rf"\1>={self.safe_version}",
+                content,
+            )
+        if new_content == content:
+            raise RuntimeError(f"Could not find {self.package} in {self.req_file}")
         self.req_file.write_text(new_content, encoding="utf-8")
 
     def diff_preview(self) -> list[str]:

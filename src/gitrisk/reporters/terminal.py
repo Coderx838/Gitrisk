@@ -51,7 +51,7 @@ class TerminalReporter:
 
     def _print_findings(self, results: ScanResults) -> None:
         if not results.findings:
-            self.console.print("[green bold]✓ No findings. Repository looks clean![/]")
+            self.console.print("[green bold][OK] No findings. Repository looks clean![/]")
             return
 
         table = Table(
@@ -76,7 +76,13 @@ class TerminalReporter:
                     loc_parts.append(f":{finding.line}")
             location = "".join(loc_parts) if loc_parts else "-"
 
-            fix_color = {"SAFE": "green", "REVIEW": "yellow", "MANUAL": "red"}.get(finding.fix_type.value, "white")
+            fix_color = {
+                "AUTO": "green",
+                "SAFE": "green",
+                "ASSISTED": "yellow",
+                "REVIEW": "bright_yellow",
+                "MANUAL": "red",
+            }.get(finding.fix_type.value, "white")
             fix_text = Text(finding.fix_type.value, style=fix_color)
 
             table.add_row(
@@ -103,14 +109,14 @@ class TerminalReporter:
         score_lines = [f"[{score_style}]GITRISK SCORE: {score}/100[/]\n"]
         for cs in sorted(results.category_scores, key=lambda c: c.name):
             bar_width = cs.score // 5  # 0-20 chars
-            bar = "█" * bar_width + "░" * (20 - bar_width)
+            bar = "=" * bar_width + "-" * (20 - bar_width)
             cs_style = "green" if cs.score >= 80 else ("yellow" if cs.score >= 60 else "red")
-            score_lines.append(f"  [bold]{cs.name:<14}[/] [{cs_style}]{cs.score:>3}/100[/]  [dim]{bar}[/]")
+            score_lines.append(f"  [bold]{cs.name:<14}[/] [{cs_style}]{cs.score:>3}/100[/]  [dim][{bar}][/]")
 
         self.console.print(
             Panel(
                 Text.from_markup("\n".join(score_lines)),
-                title="📊 Score",
+                title="[cyan]>> Score[/]",
                 border_style=score_style.split()[0],
                 expand=False,
             )
@@ -135,15 +141,15 @@ class TerminalReporter:
             parts.append(f"[green]{low} low[/]")
 
         if parts:
-            summary = " · ".join(parts)
+            summary = " | ".join(parts)
             self.console.print(f"  {total} finding(s): {summary}")
         else:
-            self.console.print(f"  [green]✓ {total} findings[/]")
+            self.console.print(f"  [green][OK] {total} findings[/]")
 
         # Safe fixes available
-        safe_count = sum(1 for f in results.findings if f.fix_type.value == "SAFE")
-        if safe_count:
-            self.console.print(f"  [green]{safe_count} fix(es) can be applied automatically[/] — run [bold]gitrisk fix .[/]")
+        fixable_count = sum(1 for f in results.findings if f.fix_type.value in ("AUTO", "SAFE", "ASSISTED"))
+        if fixable_count:
+            self.console.print(f"  [green]{fixable_count} fix(es) available[/] - run [bold]gitrisk fix .[/bold]")
 
         elapsed = results.elapsed_seconds
         self.console.print(f"  [dim]Completed in {elapsed:.2f}s[/]")

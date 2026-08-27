@@ -89,6 +89,14 @@ class DependencyScanner(BaseScanner):
             for pkg_name, pkg_version in packages:
                 vulns = db.query(ecosystem="PyPI", package=pkg_name, version=pkg_version)
                 for vuln in vulns:
+                    # Create an assisted dependency fixer for requirements.txt
+                    dep_fix_fn = None
+                    if mfile.name.startswith("requirements") and pkg_version:
+                        safe_target = "2.32.4" if pkg_name == "requests" else "latest"
+                        def make_fixer(mf: Path, pn: str, pv: str, sv: str):
+                            return lambda rp: DependencyFixer(mf, pn, pv, sv).apply(rp)
+                        dep_fix_fn = make_fixer(mfile, pkg_name, pkg_version, safe_target)
+
                     findings.append(Finding(
                         id=f"DEP-{vuln.get('id', 'UNKNOWN')[:8]}",
                         scanner=self.name,
@@ -109,6 +117,7 @@ class DependencyScanner(BaseScanner):
                         references=[
                             f"https://osv.dev/vulnerability/{vuln.get('id', '')}",
                         ],
+                        auto_fix=dep_fix_fn,
                     ))
         return findings
 

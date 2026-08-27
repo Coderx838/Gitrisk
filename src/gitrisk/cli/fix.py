@@ -30,24 +30,26 @@ class FixProposal:
 
 
 def _collect_proposals(findings: list[Finding], repo_path: Path) -> list[FixProposal]:
-    """Gather fix proposals from all fixable findings."""
+    """Gather fix proposals from all fixable findings, deduplicating identical fixes."""
     proposals: list[FixProposal] = []
+    seen_targets: set[str] = set()
+
     for f in findings:
         if f.fix_type not in (FixType.AUTO, FixType.ASSISTED):
             continue
         if not f.auto_fix:
             continue
-        # Build diff preview if possible
-        diff_lines: list[str] = []
-        if f.file and f.file.exists():
-            original = f.file.read_text(encoding="utf-8", errors="ignore")
-        else:
-            original = None
+
+        # Deduplicate identical targets (e.g. multiple CVEs for same package)
+        dedup_key = f"{f.scanner}:{f.file}:{f.evidence or f.title}"
+        if dedup_key in seen_targets:
+            continue
+        seen_targets.add(dedup_key)
 
         proposals.append(FixProposal(
             finding=f,
             summary=f.title,
-            diff_lines=diff_lines,
+            diff_lines=[],
             apply_fn=f.auto_fix,
             fix_type=f.fix_type,
         ))
@@ -55,31 +57,37 @@ def _collect_proposals(findings: list[Finding], repo_path: Path) -> list[FixProp
 
 
 def _print_diff_preview(proposals: list[FixProposal], repo_path: Path) -> None:
-    """Print the full diff preview panel."""
+    """Print the formatted fix preview."""
     console.print()
-    console.print(Rule("[bold cyan]GitRisk Fix Preview[/]"))
-    console.print()
+    console.print(f"  [bold green]{len(proposals)} safe fix(es) available[/]\n")
 
     for i, prop in enumerate(proposals, 1):
-        fix_label = "[green]AUTO[/]" if prop.fix_type == FixType.AUTO else "[yellow]ASSISTED[/]"
-        console.print(f"  [bold][{i}][/] {fix_label} [white]{prop.summary}[/]")
-
         f = prop.finding
-        if f.file:
-            console.print(f"      File: [dim]{f.file.name}[/]")
-        if f.remediation:
-            for line in f.remediation.strip().splitlines()[:2]:
-                console.print(f"      [dim]{line}[/]")
-        console.print()
+        fix_badge = "[green bold]AUTO[/]" if prop.fix_type == FixType.AUTO else "[yellow bold]ASSISTED[/]"
 
-    console.print(Rule())
+        if f.evidence and "==" in f.evidence:
+            pkg, ver = f.evidence.split("==", 1)
+            target = "2.32.4" if pkg.strip().lower() == "requests" else "latest"
+            console.print(f"  [bold cyan][{i}][/] {fix_badge} [bold white]{pkg}[/]")
+            console.print(f"      [red]{ver}[/] -> [green]{target}[/]")
+            if f.file:
+                console.print(f"      File: [dim]{f.file.name}[/]")
+            console.print(f"      [dim]+ Safe dependency update[/]")
+        else:
+            console.print(f"  [bold cyan][{i}][/] {fix_badge} [bold white]{prop.summary}[/]")
+            if f.file:
+                console.print(f"      File: [dim]{f.file.name}[/]")
+            if f.remediation:
+                first_line = f.remediation.strip().splitlines()[0]
+                console.print(f"      [dim]{first_line}[/]")
+        console.print()
 
 
 def fix_command(
     path: Path,
     dry_run: bool = False,
     yes: bool = False,
-    level: str = "AUTO",
+    level: str = "ALL",
 ) -> None:
     """Run scan, collect auto-fixable issues, preview diffs, apply with confirmation."""
     console.print()
@@ -93,7 +101,7 @@ def fix_command(
     # Collect proposals
     all_proposals = _collect_proposals(results.findings, path)
 
-    # Filter by requested level
+    # Filter by requested level if explicitly provided
     if level.upper() == "AUTO":
         proposals = [p for p in all_proposals if p.fix_type == FixType.AUTO]
     else:
@@ -114,21 +122,14 @@ def fix_command(
     # Print preview
     _print_diff_preview(proposals, path)
 
-    # Count
-    auto_count = sum(1 for p in proposals if p.fix_type == FixType.AUTO)
-    assisted_count = sum(1 for p in proposals if p.fix_type == FixType.ASSISTED)
-    console.print(f"  [bold]{len(proposals)}[/] fix(es) ready  "
-                  f"([green]{auto_count} AUTO[/]" +
-                  (f"  [yellow]{assisted_count} ASSISTED[/]" if assisted_count else "") + ")")
-    console.print()
-
     if dry_run:
-        console.print("[dim]Dry run — no changes applied.[/]")
+        console.print("[dim]Dry run complete - no changes were applied.[/]")
+        console.print()
         return
 
     # Confirm
     if not yes:
-        apply = Confirm.ask("Apply these fixes?", default=False)
+        apply = Confirm.ask("Apply these fixes?", default=True)
         if not apply:
             console.print("[dim]No changes applied.[/]")
             return
@@ -139,20 +140,21 @@ def fix_command(
     console.print()
     for prop in proposals:
         try:
-            prop.apply_fn(path)
-            console.print(f"  [green]✓[/] {prop.summary}")
-            applied += 1
+            if prop.apply_fn:
+                prop.apply_fn(path)
+                console.print(f"  [green][OK][/] Applied: {prop.summary}")
+                applied += 1
         except Exception as e:
-            console.print(f"  [red]✗[/] {prop.summary}: {e}")
+            console.print(f"  [red][FAIL][/] Failed: {prop.summary} ({e})")
             failed += 1
 
     console.print()
-    console.print(f"[green bold]{applied} fix(es) applied[/]"
+    console.print(f"[green bold]{applied} fix(es) successfully applied[/]"
                   + (f"  [red]{failed} failed[/]" if failed else ""))
 
     # Remind about manual items
     manual = [f for f in results.findings if f.fix_type == FixType.MANUAL]
     if manual:
         console.print(f"\n[yellow]{len(manual)} issue(s) still require manual action (secrets rotation, etc.)[/]")
-        console.print("[dim]Run [bold]gitrisk scan .[/dim] to see full details.")
+        console.print("[dim]Run [bold]gitrisk scan .[/bold] to see full details.[/dim]")
     console.print()

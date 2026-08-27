@@ -85,7 +85,7 @@ def fix(
     ),
     dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Preview fixes without applying them."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Apply all safe fixes without confirmation (CI mode)."),
-    level: str = typer.Option("AUTO", "--level", "-l", help="Max fix level to apply: AUTO or ASSISTED."),
+    level: str = typer.Option("ALL", "--level", "-l", help="Fix level to apply: ALL, AUTO, or ASSISTED."),
 ) -> None:
     """Preview and apply safe remediations with diff preview."""
     fix_command(path=path, dry_run=dry_run, yes=yes, level=level)
