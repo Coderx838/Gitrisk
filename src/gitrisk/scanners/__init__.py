@@ -1,4 +1,4 @@
-﻿"""GitRisk scanners registry."""
+"""GitRisk scanners registry."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from gitrisk.scanners.git_config.scanner import GitConfigScanner
 from gitrisk.scanners.outdated.scanner import OutdatedDepsScanner
 from gitrisk.scanners.security_policy.scanner import SecurityPolicyScanner
 from gitrisk.scanners.hardcoding.scanner import HardcodingScanner
+from gitrisk.scanners.git_history.scanner import GitHistoryScanner
 
 _ALL_SCANNERS: list[type[BaseScanner]] = [
     SecretsScanner,
@@ -25,6 +26,7 @@ _ALL_SCANNERS: list[type[BaseScanner]] = [
     OutdatedDepsScanner,
     SecurityPolicyScanner,
     HardcodingScanner,
+    GitHistoryScanner,
 ]
 
 

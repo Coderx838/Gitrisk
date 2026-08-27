@@ -1,4 +1,4 @@
-﻿"""Core data models for GitRisk."""
+"""Core data models for GitRisk."""
 
 from __future__ import annotations
 
@@ -43,10 +43,32 @@ class Severity(IntEnum):
 
 
 class FixType(str, Enum):
-    """How a finding should be remediated."""
-    SAFE = "SAFE"        # Can be auto-applied
-    REVIEW = "REVIEW"    # Show diff, user must approve
-    MANUAL = "MANUAL"    # Human judgment required
+    """How a finding should be remediated — 4-level safety system."""
+    AUTO = "AUTO"        # Safe + deterministic. Preview shown, auto-applied with confirmation.
+    ASSISTED = "ASSISTED"  # GitRisk prepares the change; user reviews diff before applying.
+    REVIEW = "REVIEW"    # Could break behavior. Show diff, requires explicit approval.
+    MANUAL = "MANUAL"    # Security decision required. Explain + guide only.
+
+    # Backward compat alias
+    SAFE = "AUTO"
+
+    @property
+    def label(self) -> str:
+        return {
+            "AUTO": "AUTO",
+            "ASSISTED": "ASSISTED",
+            "REVIEW": "REVIEW",
+            "MANUAL": "MANUAL",
+        }.get(self.value, self.value)
+
+    @property
+    def color(self) -> str:
+        return {
+            "AUTO": "green",
+            "ASSISTED": "yellow",
+            "REVIEW": "dark_orange",
+            "MANUAL": "red",
+        }.get(self.value, "white")
 
 
 @dataclass

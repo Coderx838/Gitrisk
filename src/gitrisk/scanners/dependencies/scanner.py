@@ -1,4 +1,4 @@
-﻿"""Dependencies scanner — checks for known vulnerable packages using local OSV database."""
+"""Dependencies scanner — checks for known vulnerable packages using local OSV database."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from packaging.version import Version, InvalidVersion
 from gitrisk.core.base import BaseScanner
 from gitrisk.core.models import Finding, FixType, Severity
 from gitrisk.database.manager import DatabaseManager
+from gitrisk.fixers.dependency_fixer import DependencyFixer, find_safe_version
 
 
 def _parse_requirements_txt(content: str) -> list[tuple[str, Optional[str]]]:
@@ -98,7 +99,7 @@ class DependencyScanner(BaseScanner):
                             f"CVE/ID: {vuln.get('id', 'N/A')}"
                         ),
                         severity=Severity.HIGH,
-                        fix_type=FixType.REVIEW,
+                        fix_type=FixType.ASSISTED,
                         remediation=(
                             f"Upgrade {pkg_name} to a patched version. "
                             f"Check https://osv.dev/vulnerability/{vuln.get('id', '')} for details."

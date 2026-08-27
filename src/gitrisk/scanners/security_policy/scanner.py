@@ -1,4 +1,4 @@
-﻿"""Security policy scanner — checks for SECURITY.md and code of conduct."""
+"""Security policy scanner — checks for SECURITY.md and code of conduct."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ class SecurityPolicyScanner(BaseScanner):
                     "GitHub also highlights repositories with a security policy in its security features."
                 ),
                 severity=Severity.LOW,
-                fix_type=FixType.SAFE,
+                fix_type=FixType.AUTO,
                 remediation="Create a SECURITY.md file at the repository root describing your security policy and how to report vulnerabilities.",
                 references=[
                     "https://docs.github.com/en/code-security/getting-started/adding-a-security-policy-to-your-repository",

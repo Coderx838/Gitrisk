@@ -1,4 +1,4 @@
-﻿"""Env file scanner — detects .env and similar sensitive files tracked by Git."""
+"""Env file scanner — detects .env and similar sensitive files tracked by Git."""
 
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ class EnvFileScanner(BaseScanner):
                         f"values are part of the repository history even if the file is later deleted."
                     ),
                     severity=Severity.HIGH,
-                    fix_type=FixType.SAFE,
+                    fix_type=FixType.AUTO,
                     remediation=(
                         f"1. Add `{env_file.name}` to .gitignore.\n"
                         f"2. Remove the file from Git tracking: `git rm --cached {env_file.name}`\n"

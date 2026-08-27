@@ -1,4 +1,4 @@
-﻿"""GitIgnore scanner — checks for missing or weak .gitignore rules."""
+"""GitIgnore scanner — checks for missing or weak .gitignore rules."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ class GitIgnoreScanner(BaseScanner):
                     "be accidentally committed."
                 ),
                 severity=Severity.MEDIUM,
-                fix_type=FixType.SAFE,
+                fix_type=FixType.AUTO,
                 remediation=(
                     "Create a .gitignore file appropriate for your project's language and framework.\n"
                     "Use gitignore.io or GitHub's template collection as a starting point."
@@ -77,7 +77,7 @@ class GitIgnoreScanner(BaseScanner):
                     f"certificates, or other credentials that should never be committed."
                 ),
                 severity=Severity.LOW,
-                fix_type=FixType.SAFE,
+                fix_type=FixType.AUTO,
                 remediation=(
                     f"Add the following to .gitignore:\n"
                     + "\n".join(missing_secrets)
