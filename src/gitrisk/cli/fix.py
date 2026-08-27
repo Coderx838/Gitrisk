@@ -80,8 +80,14 @@ def _print_diff_preview(proposals: list[FixProposal], repo_path: Path) -> None:
         fix_badge = "[green bold]AUTO[/]" if prop.fix_type == FixType.AUTO else "[yellow bold]ASSISTED[/]"
 
         if f.evidence and "==" in f.evidence:
+            import re
             pkg, ver = f.evidence.split("==", 1)
-            target = "2.34.2" if pkg.strip().lower() == "requests" else "latest"
+            target = None
+            if f.remediation:
+                m = re.search(r">=\s*([0-9A-Za-z\.\-_]+)", f.remediation)
+                if m:
+                    target = m.group(1)
+            target = target or "latest"
             console.print(f"  [bold cyan][{i}][/] {fix_badge} [bold white]{pkg}[/]")
             console.print(f"      [red]{ver}[/] {arrow} [green]{target}[/]")
             if f.file:

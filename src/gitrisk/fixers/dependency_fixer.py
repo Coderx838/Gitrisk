@@ -24,12 +24,14 @@ def find_safe_version(
     fixed_versions: list[str],
 ) -> Optional[str]:
     """Given the list of fixed/safe versions from OSV, find the best upgrade.
-    Rules:
-    - Must be > current_version
-    - Prefer minimum safe version (least disruptive)
-    - Never auto-upgrade major version (REVIEW required)
-    Returns None if no safe minor/patch upgrade found.
+    Resolves to real safe PyPI release or maximum candidate from advisory records.
     """
+    # 1. Try fetching latest PyPI version for zero remaining vulnerabilities
+    latest = get_pypi_latest(package)
+    if latest:
+        return latest
+
+    # 2. Fallback to parsing advisory candidate versions offline
     cur = _parse_version_safe(current_version)
     if not cur:
         return None
@@ -37,28 +39,14 @@ def find_safe_version(
     candidates = []
     for v_str in fixed_versions:
         v = _parse_version_safe(v_str)
-        if v is None:
-            continue
-        if v <= cur:
-            continue
-        # Block major version upgrades
-        if v.major != cur.major:
+        if v is None or v <= cur:
             continue
         candidates.append(v)
 
     if candidates:
-        # Take the maximum candidates to ensure ALL active vulnerabilities are patched
         return str(max(candidates))
 
-    # Allow latest across majors only if no same-major safe version exists
-    all_higher = []
-    for v_str in fixed_versions:
-        v = _parse_version_safe(v_str)
-        if v and v > cur:
-            all_higher.append(v)
-    if not all_higher:
-        return None
-    return str(max(all_higher))
+    return None
 
 
 def get_pypi_latest(package: str) -> Optional[str]:
