@@ -69,10 +69,10 @@ def _print_diff_preview(proposals: list[FixProposal], repo_path: Path) -> None:
             pkg, ver = f.evidence.split("==", 1)
             target = "2.32.4" if pkg.strip().lower() == "requests" else "latest"
             console.print(f"  [bold cyan][{i}][/] {fix_badge} [bold white]{pkg}[/]")
-            console.print(f"      [red]{ver}[/] -> [green]{target}[/]")
+            console.print(f"      [red]{ver}[/] → [green]{target}[/]")
             if f.file:
                 console.print(f"      File: [dim]{f.file.name}[/]")
-            console.print(f"      [dim]+ Safe dependency update[/]")
+            console.print(f"      [dim]✓ Safe dependency update[/]")
         else:
             console.print(f"  [bold cyan][{i}][/] {fix_badge} [bold white]{prop.summary}[/]")
             if f.file:
@@ -123,7 +123,7 @@ def fix_command(
     _print_diff_preview(proposals, path)
 
     if dry_run:
-        console.print("[dim]Dry run complete - no changes were applied.[/]")
+        console.print("[dim]Dry run complete — no changes were applied.[/]")
         console.print()
         return
 
@@ -142,10 +142,10 @@ def fix_command(
         try:
             if prop.apply_fn:
                 prop.apply_fn(path)
-                console.print(f"  [green][OK][/] Applied: {prop.summary}")
+                console.print(f"  [green]✓[/] Applied: {prop.summary}")
                 applied += 1
         except Exception as e:
-            console.print(f"  [red][FAIL][/] Failed: {prop.summary} ({e})")
+            console.print(f"  [red]✗[/] Failed: {prop.summary} ({e})")
             failed += 1
 
     console.print()
