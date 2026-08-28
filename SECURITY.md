@@ -4,7 +4,9 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | ✅        |
+| 0.3.x   | ✅ Active Support |
+| 0.2.x   | ⚠️ Security fixes only |
+| < 0.2.0 | ❌ Unsupported |
 
 ## Reporting a Vulnerability
 
@@ -12,24 +14,25 @@ If you discover a security vulnerability in GitRisk itself, **please do not open
 
 Instead:
 
-1. Open a [GitHub Security Advisory](https://github.com/gitrisk/gitrisk/security/advisories/new) (preferred).
-2. Or email the maintainers directly (contact info in the GitHub profile).
+1. Open a private [GitHub Security Advisory](https://github.com/Coderx838/Gitrisk/security/advisories/new) (preferred).
+2. Or contact the maintainers directly via GitHub.
 
-We aim to respond within **72 hours** and provide a fix within **14 days** for critical issues.
+We aim to acknowledge reports within **48 hours** and provide a patched release within **7 days** for critical issues.
 
-## Privacy Guarantee
+## Privacy & Local Execution Guarantee
 
-GitRisk is designed to be privacy-first:
+GitRisk is engineered from the ground up to be **privacy-first and local-first**:
 
-- **No code is ever uploaded.** All scanning runs locally.
-- **No account required.** The CLI works without authentication.
-- **Internet access is optional.** Only `gitrisk db update` makes network requests — and only to download public vulnerability data.
-- **The `db update` command never transmits your repository contents, package names, file paths, or scan results.**
+- **Zero Code Transmission:** Your code, file names, commit history, and scan results are processed 100% locally in memory and never leave your machine.
+- **Zero Telemetry / Tracking:** No usage metrics, error telemetry, or tracking pings are embedded in GitRisk.
+- **No Account Required:** The CLI operates fully without authentication, tokens, or cloud services.
+- **Offline Capable:** Internet access is strictly optional and only utilized when running `gitrisk db update` to pull public OSV vulnerability records directly into your local SQLite cache.
+- **Safe Advisory Updates:** The `db update` command downloads public advisory datasets without sending any information about your repositories, installed packages, or local environment.
 
 ## Scope
 
 In scope for security reports:
-- Any code path that could cause GitRisk to transmit repository data
-- Vulnerabilities in GitRisk's own dependencies
-- Privilege escalation or path traversal issues in the scanner
-- False negatives in secret detection that could endanger users
+- Any code path that could cause GitRisk to transmit repository or environment data
+- Vulnerabilities or supply chain risks in GitRisk's own dependencies
+- Path traversal or execution escalation issues in the scanner engine or fixer subsystem
+- False negatives or bypasses in secret detection that could endanger users
