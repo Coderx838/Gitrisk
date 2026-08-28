@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Iterator
 
@@ -39,8 +41,18 @@ SECRET_PATTERNS: list[tuple[str, str, str, Severity]] = [
 ]
 
 # ---------------------------------------------------------------------------
-# False-positive helpers for SEC-020
+# False-positive detection for SEC-020 — entropy + string literal requirement
 # ---------------------------------------------------------------------------
+
+# Code file extensions — values MUST be string literals (quoted) to be real secrets.
+# A variable assignment like `api_key = self.gemini_api_key` is never a literal secret.
+_CODE_EXTS = {
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".java", ".rb", ".php",
+    ".cs", ".cpp", ".c", ".h", ".sh", ".bash", ".zsh", ".rs", ".kt", ".swift",
+}
+
+# Config/env files — values may be unquoted; use entropy as primary filter.
+_ENV_EXTS = {".env", ".ini", ".cfg", ".conf", ".properties"}
 
 # Values that are provably not secrets
 _FP_VALUE_RE = re.compile(
@@ -77,20 +89,56 @@ _PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Python function definition line
-_FUNC_DEF_RE = re.compile(r"^\s*def\s+\w+\s*\(")
+# Python/JS function definition line (parameters are never secrets)
+_FUNC_DEF_RE = re.compile(r"^\s*(?:def|function|func|fn)\s+\w+\s*\(")
 
-# Documentation file extensions — apply stricter placeholder filtering
+# Documentation file extensions
 _DOC_EXTS = {".md", ".rst", ".txt", ".adoc"}
+
+# Entropy thresholds (bits per character)
+# Real secrets: AKIA…, ghp_…, base64 tokens, API keys → typically 4.0–5.5
+# Variable names: gemini_api_key, api_key.strip() → typically 2.5–3.2
+_ENTROPY_MIN_CODE = 3.0   # for quoted string literals in code
+_ENTROPY_MIN_ENV  = 3.2   # for unquoted values in .env/.cfg files
+
+
+def _shannon_entropy(s: str) -> float:
+    """Calculate Shannon entropy in bits per character.
+    High entropy (>3.5) means random, secret-like.
+    Low entropy (<3.0) means structured/dictionary-like (variable names, words).
+    """
+    if len(s) < 2:
+        return 0.0
+    counts = Counter(s)
+    n = len(s)
+    return -sum((c / n) * math.log2(c / n) for c in counts.values())
 
 
 def _is_sec020_fp(line: str, matched_value: str, filepath: Path) -> bool:
-    """Return True if this SEC-020 match is a known false positive and should be suppressed."""
-    val = matched_value.strip().strip("\"'")
+    """Return True if this SEC-020 match is a known false positive.
 
-    if _FP_VALUE_RE.match(val):
+    Uses a two-stage approach (same methodology as Gitleaks/TruffleHog):
+    1. String literal requirement: in code files, real secrets MUST be quoted.
+       `api_key = self.gemini_api_key` → FP (unquoted variable reference)
+       `api_key = "AIzaSy...actual..."` → real (quoted string literal)
+    2. Shannon entropy gate: even if quoted, low-entropy strings are placeholders.
+       `password = "my_password_here"` → FP (entropy ~2.8, below threshold)
+       `password = "P@ssw0rd!k9xQr..."` → real (entropy ~4.2, above threshold)
+    """
+    val = matched_value.strip()
+    ext = filepath.suffix.lower()
+    fname = filepath.name.lower()
+
+    is_env_file = ext in _ENV_EXTS or fname.startswith(".env")
+    is_code_file = ext in _CODE_EXTS
+
+    # --- Quick filters on the raw value (before entropy) ---
+    # Strip quotes to get the inner value for checks
+    inner = val.strip('"\'`')
+
+    if _FP_VALUE_RE.match(inner) or _FP_VALUE_RE.match(val):
         return True
-    if _PLACEHOLDER_RE.search(val):
+    if _PLACEHOLDER_RE.search(inner):
         return True
     if _ENV_REF_RE.search(line):
         return True
@@ -101,14 +149,32 @@ def _is_sec020_fp(line: str, matched_value: str, filepath: Path) -> bool:
     if stripped.startswith(("#", "//", "/*", "*", "--", "<!--")):
         return True
 
-    # In doc files: plain identifier (no special chars) is always a variable name, not a secret
     if filepath.suffix.lower() in _DOC_EXTS:
-        if re.match(r"^[a-zA-Z][a-zA-Z0-9_]*$", val):
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9_]*$", inner):
             return True
 
-    # Too short to be a real secret after stripping quotes/wrappers
-    if len(val) < 8:
+    # --- Stage 1: String Literal Requirement (code files only) ---
+    if is_code_file:
+        # If the value doesn't start with a quote, it's a variable/expression, never a literal secret.
+        # Examples of what gets suppressed:
+        #   self.api_key = gemini_api_key     → val = "gemini_api_key"        → no quote → FP
+        #   api_key = api_key.strip()         → val = "api_key.strip()"       → no quote → FP
+        #   api_key = self.gemini_api_key     → val = "self.gemini_api_key"   → no quote → FP
+        #   api_key = load_api_key()          → val = "load_api_key()"        → no quote → FP
+        is_quoted = bool(re.match(r'^[brfBRF]*["\']', val))
+        if not is_quoted:
+            return True  # Definite false positive: unquoted = code reference
+        # Extract actual string content (remove quote chars and prefixes)
+        inner = re.sub(r'^[brfBRF]*["\']|["\']$', '', val)
+
+    # --- Stage 2: Shannon Entropy Gate ---
+    if len(inner) < 8:
         return True
+
+    threshold = _ENTROPY_MIN_ENV if is_env_file else _ENTROPY_MIN_CODE
+    ent = _shannon_entropy(inner)
+    if ent < threshold:
+        return True  # Low entropy: placeholder, word, or structured text
 
     return False
 
