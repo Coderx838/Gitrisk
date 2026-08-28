@@ -4,123 +4,167 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Status: Alpha](https://img.shields.io/badge/status-alpha-orange.svg)]()
+[![Version: v0.3.2](https://img.shields.io/badge/version-0.3.2-green.svg)](https://github.com/Coderx838/Gitrisk)
 
 GitRisk is a **privacy-first, local-first, offline-capable** security and repository-health scanner for Git repositories.
 
-> ⚠️ **Early Development** — GitRisk is in active development (v0.1). APIs and scanners may change.
+---
 
-## Philosophy
+## 🌟 What's New in v0.3.2
 
-- **No server.** All scanning runs on your machine.
-- **No account.** No registration required.
-- **No code upload.** Your code never leaves your system.
-- **Local scanning.** Fast, zero-config, terminal-native.
-- **Optional updates.** Internet is only used when you choose to update the local vulnerability database.
+- **🛡️ Git Exposure Classification:** Intelligently checks the Git index and `.gitignore`. Secrets inside properly ignored local files (like `.env`) are recognized as safe and won't trigger false alarms.
+- **🧠 Shannon Entropy & String Literal Engine:** Differentiates real high-entropy secrets from code variable names, function parameter signatures (`def foo(api_key=None)`), and documentation placeholders.
+- **🎯 Context-Aware Secret Matching:** Eliminates false positives from generic 128-bit UUIDs (e.g. Bluetooth GATT, database IDs) while accurately detecting actual API keys.
+- **📜 Git History Deep Scanner:** Uncovers secrets committed to previous commits even if removed in subsequent commits.
+- **⚡ Smart 1-Click Fix Engine:** Automatically patches vulnerable dependencies to verified safe versions, creates/updates `.gitignore`, and generates repository security files (`SECURITY.md`, `.github/dependabot.yml`).
+- **📊 Consolidated Vulnerability Reporting:** Merges multiple CVEs/GHSAs for a single dependency into one clean row in scan results.
 
-## Quick Start
+---
+
+## 🔒 Philosophy
+
+- **No server.** All scanning runs entirely on your local machine.
+- **No account.** No registration or API keys required to scan.
+- **No code upload.** Your code and repository data never leave your system.
+- **Local vulnerability database.** Queries a fast local SQLite DB populated from OSV.dev.
+- **Zero-config & fast.** Scans repositories with thousands of files in seconds.
+
+---
+
+## 🚀 Quick Start
 
 ```bash
-# Install
-pip install gitrisk
-
-# Scan the current directory
-gitrisk scan .
-
-# Scan a specific project
-gitrisk scan ./my-project
+# Install directly from GitHub
+pip install git+https://github.com/Coderx838/Gitrisk.git
 
 # Update local vulnerability database
 gitrisk db update
 
-# Get help
-gitrisk --help
+# Scan the current directory
+gitrisk scan .
+
+# Automatically apply safe fixes
+gitrisk fix .
 ```
 
-## What GitRisk Scans
+---
 
-| # | Scanner | Detects |
-|---|---------|--------|
-| 1 | **Secrets** | API keys, tokens, private keys, passwords |
-| 2 | **Dependencies** | Known vulnerable packages (via local OSV DB) |
-| 3 | **.env tracked** | Environment files committed to Git |
-| 4 | **GitHub Actions** | Excessive workflow permissions |
-| 5 | **Missing .gitignore** | No or weak ignore rules |
-| 6 | **Sensitive files** | Private keys, certs, dumps, credential files |
-| 7 | **Git configuration** | Risky repository configuration |
-| 8 | **Outdated dependencies** | Packages significantly behind current versions |
-| 9 | **Missing SECURITY.md** | No vulnerability disclosure policy |
-| 10 | **Suspicious hardcoding** | Passwords, connection strings, embedded tokens |
-
-## Example Output
-
-```
-GitRisk v0.1.0
-Repository: my-project
-Files scanned: 247
-
-GITRISK SCORE: 72/100
-  Security      81/100
-  Dependencies  64/100
-  Git           92/100
-  Secrets       58/100
-  Configuration 76/100
-
-🔴 HIGH  Hardcoded API key detected            api/client.py:42
-🔴 HIGH  Dependency has known vulnerability    requirements.txt:7
-🟡 MED   .env file is tracked by Git           .env
-🟡 MED   GitHub Action has excessive perms     .github/workflows/ci.yml:3
-🟢 LOW   Missing SECURITY.md                   /
-
-5 risks found · 1 critical action recommended
-```
-
-## Remediation Types
-
-GitRisk classifies each fix so you know what level of review is needed:
-
-- **SAFE** — Automatic, deterministic fixes (e.g., adding `.env` to `.gitignore`)
-- **REVIEW** — GitRisk generates a patch, you review before applying
-- **MANUAL** — Security incidents requiring human judgment (e.g., secret rotation)
-
-## Installation
-
-### From PyPI (when available)
-
-```bash
-pip install gitrisk
-```
-
-### From Source
-
-```bash
-git clone https://github.com/gitrisk/gitrisk.git
-cd gitrisk
-pip install -e .[dev]
-```
-
-## Commands
+## 🛠️ CLI Commands & Usage
 
 | Command | Description |
-|---------|-------------|
-| `gitrisk scan [PATH]` | Scan a repository |
-| `gitrisk scan --format json` | Output findings as JSON |
-| `gitrisk scan --format sarif` | Output findings as SARIF |
-| `gitrisk scan --severity HIGH` | Filter by severity |
-| `gitrisk db update` | Update local vulnerability database |
-| `gitrisk db status` | Show local DB info |
-| `gitrisk fix` | Interactive remediation |
-| `gitrisk report` | Generate HTML/JSON report |
-| `gitrisk --version` | Show version |
+|---|---|
+| `gitrisk scan [PATH]` | Scan a repository for vulnerabilities, secrets, and misconfigurations |
+| `gitrisk scan --format json` | Output structured findings as JSON |
+| `gitrisk scan --format sarif` | Output findings in standard SARIF format (for GitHub code scanning) |
+| `gitrisk scan --severity HIGH` | Filter findings by minimum severity (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`) |
+| `gitrisk fix [PATH]` | Interactively preview and apply safe automated fixes |
+| `gitrisk fix [PATH] --dry-run` | Preview diffs and patches without modifying files |
+| `gitrisk fix [PATH] --yes` | Apply all safe fixes without prompting (ideal for CI/CD pipelines) |
+| `gitrisk db update` | Download or refresh local OSV vulnerability database |
+| `gitrisk db status` | Check status and record count of the local vulnerability DB |
+| `gitrisk report [PATH]` | Generate a full JSON or SARIF report file |
+| `gitrisk --version` | Display version and ASCII banner |
 
-## Contributing
+---
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+## 🔍 What GitRisk Scans
 
-## Security
+| # | Scanner | Detects |
+|---|---|---|
+| 1 | **Secrets Scanner** | High-entropy API keys, tokens, private keys, passwords (with string literal + entropy validation) |
+| 2 | **Git History Scanner** | Deleted or leaked secrets in commit history |
+| 3 | **Dependencies Scanner** | Known CVEs/GHSAs in `requirements.txt` & `pyproject.toml` via local OSV DB |
+| 4 | **Outdated Dependencies** | Pinned dependencies significantly lagging behind current releases |
+| 5 | **.env & Config Exposure** | Unprotected `.env` files tracked by Git or missing from `.gitignore` |
+| 6 | **GitHub Actions Scanner** | Overly permissive workflows, unpinned action hashes, dangerous script injections |
+| 7 | **GitIgnore Scanner** | Missing security ignores (`.env`, `*.pem`, `*.key`, credential caches) |
+| 8 | **Sensitive Files Scanner** | Committed certificates, database dumps, SSH keys, configuration archives |
+| 9 | **Git Config Scanner** | Risky local Git settings (`fileMode`, unsafe remotes, compromised hooks) |
+| 10 | **Security Policy Scanner** | Missing `SECURITY.md`, `README.md`, or Dependabot configuration |
+| 11 | **Hardcoding Scanner** | Hardcoded connection strings, database URLs, and exposed internal endpoints |
 
-See [SECURITY.md](SECURITY.md) for the security policy and how to report vulnerabilities.
+---
 
-## License
- 
+## 💻 Example Output
+
+```text
+╭────────────── >> GitRisk Scan ──────────────╮
+│ GitRisk v0.3.2                              │
+│ Repository: my-project                      │
+│ Path:       C:\my-project                   │
+│ Files:      124 scanned                     │
+│ Scanned:    2026-08-28 14:30                │
+╰─────────────────────────────────────────────╯
+
+╭────────┬────────────┬───────────────────────────────────────────────────────────┬──────────────────┬──────────╮
+│ Sev    │ ID         │ Finding                                                   │ Location         │ Fix      │
+├────────┼────────────┼───────────────────────────────────────────────────────────┼──────────────────┼──────────┤
+│ CRIT   │ SEC-001    │ AWS Access Key ID detected                                │ app.py:12        │ MANUAL   │
+│ CRIT   │ HIST-001   │ Secret exposed in Git history (commit 01d18f8)            │ keys.txt         │ MANUAL   │
+│ HIGH   │ DEP-001    │ Vulnerable dependency: requests (8 vulnerabilities)       │ requirements.txt │ ASSISTED │
+│ LOW    │ GIT-002    │ .gitignore is missing critical security patterns          │ .gitignore       │ AUTO     │
+│ LOW    │ POL-001    │ No SECURITY.md found                                      │ -                │ AUTO     │
+╰────────┴────────────┴───────────────────────────────────────────────────────────┴──────────────────┴──────────╯
+
+╭─────────────────── 📊 Score ───────────────────╮
+│ GITRISK SCORE: 78/100                          │
+│                                                │
+│   Configuration  100/100  ████████████████████ │
+│   Dependencies    65/100  █████████████░░░░░░░ │
+│   General        100/100  ████████████████████ │
+│   Git             90/100  ██████████████████░░ │
+│   Policy          95/100  ███████████████████░ │
+│   Secrets         60/100  ████████████░░░░░░░░ │
+╰────────────────────────────────────────────────╯
+
+  5 finding(s): 2 critical · 1 high · 2 low
+  3 fix(es) can be applied automatically — run gitrisk fix .
+```
+
+---
+
+## 🔧 4-Tier Remediation System
+
+GitRisk categorizes every finding with a remediation tier so you immediately know what action is required:
+
+- **`AUTO`** — 100% deterministic, zero-risk fixes (e.g. creating `SECURITY.md`, appending missing security ignore rules).
+- **`ASSISTED`** — Automated dependency upgrade to a verified minimum-safe version computed against the local OSV DB.
+- **`REVIEW`** — Patch generated for review (e.g. updating outdated major packages, configuration adjustments).
+- **`MANUAL`** — Human action mandatory (e.g. revoking exposed API tokens, rotating leaked database credentials, purging git history via `git-filter-repo`).
+
+---
+
+## 📦 Installation
+
+### From GitHub
+
+```bash
+pip install --upgrade git+https://github.com/Coderx838/Gitrisk.git
+```
+
+### From Source (Development)
+
+```bash
+git clone https://github.com/Coderx838/Gitrisk.git
+cd Gitrisk
+pip install -e .[dev]
+pytest -q
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding new scanners and test cases.
+
+---
+
+## 🛡️ Security
+
+See [SECURITY.md](SECURITY.md) for our security policy and how to report vulnerabilities.
+
+---
+
+## 📄 License
+
 GNU General Public License v3.0 — see [LICENSE](LICENSE).
