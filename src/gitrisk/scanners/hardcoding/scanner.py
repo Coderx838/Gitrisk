@@ -1,4 +1,4 @@
-﻿"""Hardcoding scanner — detects hardcoded passwords, connection strings, and embedded tokens."""
+"""Hardcoding scanner — detects hardcoded passwords, connection strings, and embedded tokens."""
 
 from __future__ import annotations
 
@@ -65,6 +65,16 @@ TEXT_EXTENSIONS = {
 }
 MAX_FILE_SIZE = 512 * 1024  # 512 KB
 
+# Documentation extensions — IPs in these are almost always examples
+_DOC_EXTENSIONS = {".md", ".rst", ".txt", ".adoc"}
+
+# "example IP" indicator words anywhere on the line
+_EXAMPLE_IP_RE = re.compile(
+    r"\be\.g\.?\b|example|sample|placeholder|like\b|such as|e\.g|illustration|"
+    r"for instance|demo|dummy|fake|test",
+    re.IGNORECASE,
+)
+
 
 class HardcodingScanner(BaseScanner):
     """Scanner 10: Detect hardcoded passwords, connection strings, and sensitive values."""
@@ -110,15 +120,28 @@ class HardcodingScanner(BaseScanner):
 
             lines = content.splitlines()
             for line_no, line in enumerate(lines, start=1):
-                # Skip comment-only lines (minor false positive reduction)
                 stripped = line.strip()
-                if stripped.startswith(("//", "/*", "*", "--")):
-                    if "HRD-005" not in [s for s, _, _, _ in HARDCODE_PATTERNS]:
-                        pass
 
                 for sid, title, regex, severity in self._compiled:
                     match = regex.search(line)
                     if match:
+                        # --- HRD-004: Context-aware IP false-positive filtering ---
+                        if sid == "HRD-004":
+                            # Skip comment-only lines
+                            if stripped.startswith(("#", "//", "/*", "*", "--", "<!--")):
+                                continue
+                            # Skip documentation files (IPs in .md/.txt are usually examples)
+                            if filepath.suffix.lower() in _DOC_EXTENSIONS:
+                                continue
+                            # Skip if the line contains example/illustration language
+                            if _EXAMPLE_IP_RE.search(line):
+                                continue
+                            # Skip if IP appears inside a quoted string that looks like an example
+                            # (e.g.  "(e.g. http://192.168.x.x:8080/video)")
+                            if re.search(r'["\(].*' + re.escape(match.group(0)) + r'.*["\)]', line):
+                                if _EXAMPLE_IP_RE.search(line):
+                                    continue
+
                         key = f"{filepath}:{line_no}:{sid}"
                         if key in seen:
                             continue
@@ -154,3 +177,4 @@ class HardcodingScanner(BaseScanner):
                             ],
                         ))
         return findings
+

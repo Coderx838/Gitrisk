@@ -19,7 +19,11 @@ SECRET_PATTERNS: list[tuple[str, str, str, Severity]] = [
     ("006", "Stripe Secret Key",          r"sk_live_[0-9a-zA-Z]{24,}", Severity.CRITICAL),
     ("007", "Stripe Publishable Key",     r"pk_live_[0-9a-zA-Z]{24,}", Severity.HIGH),
     ("008", "Google API Key",             r"AIza[0-9A-Za-z\-_]{35}", Severity.HIGH),
-    ("009", "Heroku API Key",             r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", Severity.MEDIUM),
+    # SEC-009: Requires 'heroku' in the variable name to avoid false-positives on
+    # Bluetooth UUIDs (0000fff1-0000-...), database IDs, session tokens, etc.
+    ("009", "Heroku API Key",
+     r"(?i)heroku[_\-.]?(?:api[_\-.]?)?(?:key|token|secret)\s*[=:]\s*['\"]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}['\"]?",
+     Severity.HIGH),
     ("010", "RSA Private Key",            r"-----BEGIN RSA PRIVATE KEY-----", Severity.CRITICAL),
     ("011", "OpenSSH Private Key",        r"-----BEGIN OPENSSH PRIVATE KEY-----", Severity.CRITICAL),
     ("012", "PEM Private Key",            r"-----BEGIN PRIVATE KEY-----", Severity.CRITICAL),
@@ -30,8 +34,84 @@ SECRET_PATTERNS: list[tuple[str, str, str, Severity]] = [
     ("017", "NPM Token",                  r"npm_[A-Za-z0-9]{36}", Severity.HIGH),
     ("018", "PyPI Token",                 r"pypi-[A-Za-z0-9\-_]{50,}", Severity.HIGH),
     ("019", "Basic Auth in URL",          r"https?://[^:@\s]+:[^:@\s]+@[^\s]+", Severity.HIGH),
-    ("020", "Generic Secret Assignment",  r"(?i)(secret|password|passwd|api_key|auth_token)\s*[=:]\s*\S{12,}", Severity.MEDIUM),
+    # SEC-020: Generic Secret Assignment — FP-filtered in scan() via _is_sec020_fp()
+    ("020", "Generic Secret Assignment",  r"(?i)(secret|password|passwd|api_key|auth_token)\s*[=:]\s*(\S{12,})", Severity.MEDIUM),
 ]
+
+# ---------------------------------------------------------------------------
+# False-positive helpers for SEC-020
+# ---------------------------------------------------------------------------
+
+# Values that are provably not secrets
+_FP_VALUE_RE = re.compile(
+    r"^("
+    r"None|False|True|null|undefined|NaN"
+    r"|os\.getenv|environ\.get|getenv\("
+    r"|config\.get|settings\.|os\.environ"
+    r"|\$\{[^}]+\}|\{\{[^}]+\}\}|<[^>]+>"
+    r"|your[_\-]?[a-z_]*[_\-]?(?:key|token|secret|password|here)"
+    r"|xxx+|placeholder|changeme|secret_here|token_here"
+    r"|[a-z_]+_here|add_your_|insert_your_"
+    r"|\*+|\.\.\.+"
+    r")",
+    re.IGNORECASE,
+)
+
+# Env reference anywhere on the line
+_ENV_REF_RE = re.compile(
+    r"os\.getenv|os\.environ|environ\[|getenv\(|config\[|settings\.|dotenv|load_dotenv",
+    re.IGNORECASE,
+)
+
+# Obvious placeholder words in the value
+_PLACEHOLDER_RE = re.compile(
+    r"your[_-]?[a-z_]*[_-]?(?:key|token|secret|password|here)"
+    r"|<[a-zA-Z_]+>"
+    r"|\{[a-zA-Z_]+\}"
+    r"|xxx+"
+    r"|example"
+    r"|placeholder"
+    r"|add[_-]your"
+    r"|insert[_-]?here"
+    r"|changeme",
+    re.IGNORECASE,
+)
+
+# Python function definition line
+_FUNC_DEF_RE = re.compile(r"^\s*def\s+\w+\s*\(")
+
+# Documentation file extensions — apply stricter placeholder filtering
+_DOC_EXTS = {".md", ".rst", ".txt", ".adoc"}
+
+
+def _is_sec020_fp(line: str, matched_value: str, filepath: Path) -> bool:
+    """Return True if this SEC-020 match is a known false positive and should be suppressed."""
+    val = matched_value.strip().strip("\"'")
+
+    if _FP_VALUE_RE.match(val):
+        return True
+    if _PLACEHOLDER_RE.search(val):
+        return True
+    if _ENV_REF_RE.search(line):
+        return True
+    if _FUNC_DEF_RE.match(line):
+        return True
+
+    stripped = line.strip()
+    if stripped.startswith(("#", "//", "/*", "*", "--", "<!--")):
+        return True
+
+    # In doc files: plain identifier (no special chars) is always a variable name, not a secret
+    if filepath.suffix.lower() in _DOC_EXTS:
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9_]*$", val):
+            return True
+
+    # Too short to be a real secret after stripping quotes/wrappers
+    if len(val) < 8:
+        return True
+
+    return False
+
 
 # File types to scan for secrets
 TEXT_EXTENSIONS = {
@@ -94,6 +174,16 @@ class SecretsScanner(BaseScanner):
                 for sid, title, regex, severity in self._compiled:
                     match = regex.search(line)
                     if match:
+                        # Apply context-aware false-positive filter for SEC-020
+                        if sid == "020":
+                            matched_value = (
+                                match.group(2)
+                                if match.lastindex and match.lastindex >= 2
+                                else match.group(0)
+                            )
+                            if _is_sec020_fp(line, matched_value, filepath):
+                                continue
+
                         key = f"{filepath}:{line_no}:{sid}"
                         if key in seen:
                             continue

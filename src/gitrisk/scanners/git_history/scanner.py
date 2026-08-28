@@ -44,6 +44,8 @@ class GitHistoryScanner(BaseScanner):
             return findings
 
         # Get recent git log diff
+        # Use encoding='utf-8' with errors='replace' to avoid UnicodeDecodeError on
+        # Windows systems where the default encoding (cp1252) cannot handle non-ASCII bytes.
         try:
             result = subprocess.run(
                 ["git", "log", f"-{MAX_COMMITS}", "-p", "--no-merges",
@@ -51,7 +53,8 @@ class GitHistoryScanner(BaseScanner):
                  "--unified=0"],
                 cwd=self.repo_path,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=30,
             )
             log_output = result.stdout
