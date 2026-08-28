@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import math
 import re
+import subprocess
 from collections import Counter
+from enum import Enum
 from pathlib import Path
 from typing import Iterator
 
@@ -198,6 +200,97 @@ SKIP_DIRS = {
 MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
 
 
+class _GitExposure(Enum):
+    """How exposed is a file's content in the git repository?"""
+    TRACKED       = "tracked"        # File is in git index — content is in the repo
+    UNTRACKED_UNSAFE = "unsafe"      # Not in git, not gitignored — could be committed accidentally
+    UNTRACKED_SAFE   = "safe"        # Not in git, gitignored — properly protected
+    UNKNOWN       = "unknown"        # Not a git repo or git unavailable
+
+
+def _get_tracked_files(repo_path: Path) -> frozenset[str]:
+    """Run `git ls-files` once and return all tracked files as a frozenset.
+    Uses forward-slash paths for cross-platform consistency.
+    Returns empty frozenset if not a git repo or git is unavailable.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=repo_path,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return frozenset(result.stdout.splitlines())
+    except Exception:
+        pass
+    return frozenset()
+
+
+def _is_gitignored(filepath: Path, repo_path: Path) -> bool:
+    """Check if a specific file is gitignored (lazy — only called when needed).
+    Uses `git check-ignore -q` which exits 0 if the file is ignored.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", "--", str(filepath)],
+            cwd=repo_path,
+            capture_output=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _classify_file_exposure(
+    filepath: Path,
+    repo_path: Path,
+    tracked_files: frozenset[str],
+    ignore_cache: dict[str, bool],
+) -> _GitExposure:
+    """Classify how exposed a file's content is in git.
+
+    Algorithm:
+    1. Convert file path to forward-slash relative path (git uses forward slashes).
+    2. Check O(1) frozenset lookup for tracked status.
+    3. If not tracked: check gitignore cache (lazy git check-ignore call).
+       - Gitignored → SAFE (correctly protected)
+       - Not gitignored → UNSAFE (risk of accidental commit)
+    4. If not a git repo: return UNKNOWN (scan everything, be safe).
+    """
+    if not tracked_files and not (repo_path / ".git").exists():
+        return _GitExposure.UNKNOWN
+
+    try:
+        rel = filepath.relative_to(repo_path)
+        rel_str = str(rel).replace("\\", "/")  # git always uses forward slashes
+    except ValueError:
+        return _GitExposure.UNKNOWN
+
+    # O(1) lookup in pre-computed frozenset
+    if rel_str in tracked_files:
+        return _GitExposure.TRACKED
+
+    # Not tracked: check gitignore (with cache for performance)
+    if rel_str not in ignore_cache:
+        ignore_cache[rel_str] = _is_gitignored(filepath, repo_path)
+    if ignore_cache[rel_str]:
+        return _GitExposure.UNTRACKED_SAFE  # .env is in .gitignore → correctly protected
+
+    return _GitExposure.UNTRACKED_UNSAFE  # Not in git, not ignored → accidental commit risk
+
+
+# File extensions considered "config/env" files
+# In these files we apply git exposure classification:
+# - TRACKED → full severity (committed secret)
+# - UNTRACKED_UNSAFE → LOW severity (risk of accidental commit)
+# - UNTRACKED_SAFE → SKIP (gitignored, properly protected)
+_CONFIG_EXTS = {".env", ".ini", ".cfg", ".conf", ".properties", ".tfvars"}
+
+
 class SecretsScanner(BaseScanner):
     """Scanner 1: Detect secrets, API keys, tokens, and private keys in source files."""
 
@@ -211,6 +304,10 @@ class SecretsScanner(BaseScanner):
             (sid, title, re.compile(pattern, re.MULTILINE), severity)
             for sid, title, pattern, severity in SECRET_PATTERNS
         ]
+        # Pre-compute git-tracked files once (O(n) single git call → O(1) per-file lookup)
+        self._tracked_files: frozenset[str] = _get_tracked_files(repo_path)
+        # Cache for gitignore status (lazy: only populated for untracked config files)
+        self._ignore_cache: dict[str, bool] = {}
 
     def _iter_files(self) -> Iterator[Path]:
         for p in self.repo_path.rglob("*"):
@@ -227,9 +324,28 @@ class SecretsScanner(BaseScanner):
 
     def scan(self) -> list[Finding]:
         findings: list[Finding] = []
-        seen: set[str] = set()  # deduplicate by (file, line, pattern_id)
+        seen: set[str] = set()
 
         for filepath in self._iter_files():
+            # --- Git Exposure Classification ---
+            # For config/env files, determine if the file is actually in the git repository.
+            # Secrets in gitignored local files are NOT a security risk for the repo.
+            is_config_file = (
+                filepath.suffix.lower() in _CONFIG_EXTS
+                or filepath.name.lower().startswith(".env")
+            )
+            if is_config_file:
+                exposure = _classify_file_exposure(
+                    filepath, self.repo_path,
+                    self._tracked_files, self._ignore_cache,
+                )
+                if exposure == _GitExposure.UNTRACKED_SAFE:
+                    # File is gitignored — secrets in it are safe, skip entirely
+                    continue
+                exposure_override = exposure  # pass to finding builder below
+            else:
+                exposure_override = None  # code files: always scan, no override
+
             try:
                 content = filepath.read_text(encoding="utf-8", errors="ignore")
             except Exception:
@@ -259,6 +375,35 @@ class SecretsScanner(BaseScanner):
                         matched_val = match.group(0)
                         redacted = matched_val[:6] + "*" * (len(matched_val) - 6) if len(matched_val) > 6 else "***"
 
+                        # Adjust severity and description based on git exposure
+                        effective_severity = severity
+                        exposure_note = ""
+                        remediation_note = (
+                            f"1. Immediately revoke and rotate the exposed credential.\n"
+                            f"2. Remove it from the file and replace with an environment variable or secret manager.\n"
+                            f"3. Add the file to .gitignore if it should never be committed.\n"
+                            f"4. Consider cleaning Git history (git filter-repo or BFG Repo Cleaner) "
+                            f"   if the secret was ever committed."
+                        )
+
+                        if exposure_override == _GitExposure.TRACKED:
+                            exposure_note = (
+                                f" ⚠ This file ({self._rel(filepath)}) IS tracked by git — "
+                                f"the secret is exposed in the repository and its full history."
+                            )
+                        elif exposure_override == _GitExposure.UNTRACKED_UNSAFE:
+                            # File is not tracked AND not gitignored — warn at LOW severity
+                            effective_severity = Severity.LOW
+                            exposure_note = (
+                                f" ⚠ {self._rel(filepath)} is not tracked by git but is also "
+                                f"NOT in .gitignore. Running `git add .` would expose this secret."
+                            )
+                            remediation_note = (
+                                f"1. Add `{self._rel(filepath)}` to .gitignore immediately to prevent accidental commits.\n"
+                                f"2. Rotate the credential as a precaution.\n"
+                                f"3. Consider using a secrets manager or environment variable instead."
+                            )
+
                         findings.append(Finding(
                             id=f"SEC-{sid}",
                             scanner=self.name,
@@ -268,16 +413,11 @@ class SecretsScanner(BaseScanner):
                                 f"This credential may already be compromised if the repository has "
                                 f"ever been public or shared. Even if it appears private, secrets in "
                                 f"source code can leak through forks, clones, or log files."
+                                f"{exposure_note}"
                             ),
-                            severity=severity,
+                            severity=effective_severity,
                             fix_type=FixType.MANUAL,
-                            remediation=(
-                                f"1. Immediately revoke and rotate the exposed credential.\n"
-                                f"2. Remove it from the file and replace with an environment variable or secret manager.\n"
-                                f"3. Add the file to .gitignore if it should never be committed.\n"
-                                f"4. Consider cleaning Git history (git filter-repo or BFG Repo Cleaner) "
-                                f"   if the secret was ever committed."
-                            ),
+                            remediation=remediation_note,
                             file=filepath,
                             line=line_no,
                             evidence=redacted,
