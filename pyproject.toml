@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gitrisk"
-version = "0.3.2"
+version = "0.4.0"
 description = "A privacy-first, local-first security and repository-health scanner for Git repositories."
 readme = "README.md"
 license = { file = "LICENSE" }
