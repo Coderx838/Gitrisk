@@ -50,6 +50,9 @@ def test_sei_suppresses_unquoted_code_variables():
         "self.brain = LLMBrain(api_key=gemini_api_key)",
         "api_key = api_key.strip()",
         "self.api_key = gemini_api_key or load_api_key()",
+        'if line.startswith("GEMINI_API_KEY="):',
+        'if line.startswith("GOOGLE_API_KEY="):',
+        'k, v = line.split("=", 1)',
     ]
     for line in cases:
         findings = sei.evaluate_line(

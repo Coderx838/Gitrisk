@@ -163,7 +163,7 @@ CANDIDATE_RULES: list[CandidateRule] = [
     CandidateRule(
         "SEC-020",
         "Generic Secret Assignment",
-        re.compile(r"(?i)(secret|password|passwd|api_key|auth_token|access_token|private_key)\s*[=:]\s*(\S+)"),
+        re.compile(r"""(?i)(?:secret|password|passwd|api_key|auth_token|access_token|private_key)\s*[=:]\s*["']([A-Za-z0-9+/=_\-.@$#!%^&*]{8,})["']"""),
         Severity.MEDIUM,
         requires_quoted_literal=True,
     ),

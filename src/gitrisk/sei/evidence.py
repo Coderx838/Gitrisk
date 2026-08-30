@@ -173,6 +173,16 @@ def evaluate_candidate_evidence(
         score -= 70
         neg.append("Value is a safe language constant (None/False/True) (-70)")
 
+    # Candidate value too short to be an actual secret (< 8 characters)
+    if len(token) < 8 and candidate.rule.rule_id not in ("SEC-010", "SEC-011", "SEC-012"):
+        score -= 85
+        neg.append("Extracted secret token is too short (< 8 chars) (-85)")
+
+    # Inside string search or comparison methods (e.g. startswith, endswith, split, get)
+    if re.search(r"\b(?:startswith|endswith|split|replace|find|index|match|search)\s*\(", line):
+        score -= 80
+        neg.append("Inside string search or parsing method call (-80)")
+
     # Unquoted code variable in a programming language file
     if topology.primary_region == RegionType.CODE and candidate.rule.requires_quoted_literal and not is_quoted:
         score -= 60

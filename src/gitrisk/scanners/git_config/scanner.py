@@ -1,4 +1,4 @@
-﻿"""Git config scanner — checks for risky repository configuration."""
+"""Git config scanner — checks for risky repository configuration."""
 
 from __future__ import annotations
 
@@ -36,8 +36,11 @@ class GitConfigScanner(BaseScanner):
         except Exception:
             return findings
 
-        # Check for fileMode = false (can hide permission changes)
-        if "fileMode = false" in content or "filemode = false" in content.lower():
+        # Check for fileMode = false (can hide permission changes on POSIX systems)
+        # Note: Windows filesystems (NTFS) do not support POSIX executable bits, so Git
+        # sets fileMode = false automatically by default on Windows.
+        import sys
+        if sys.platform != "win32" and ("fileMode = false" in content or "filemode = false" in content.lower()):
             findings.append(Finding(
                 id="GIT-011",
                 scanner=self.name,
