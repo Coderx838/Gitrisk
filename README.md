@@ -4,20 +4,20 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: v0.3.2](https://img.shields.io/badge/version-0.3.2-green.svg)](https://github.com/Coderx838/Gitrisk)
+[![Version: v0.4.0](https://img.shields.io/badge/version-0.4.0-green.svg)](https://github.com/Coderx838/Gitrisk)
 
-GitRisk is a **privacy-first, local-first, offline-capable** security and repository-health scanner for Git repositories.
+GitRisk is a **privacy-first, local-first, offline-capable** security and repository-health scanner for Git repositories, powered by the **GitRisk SEI (Secret Intelligence Engine)**.
 
 ---
 
-## 🌟 What's New in v0.3.2
+## 🌟 What's New in v0.4.0 — The SEI Engine
 
-- **🛡️ Git Exposure Classification:** Intelligently checks the Git index and `.gitignore`. Secrets inside properly ignored local files (like `.env`) are recognized as safe and won't trigger false alarms.
-- **🧠 Shannon Entropy & String Literal Engine:** Differentiates real high-entropy secrets from code variable names, function parameter signatures (`def foo(api_key=None)`), and documentation placeholders.
-- **🎯 Context-Aware Secret Matching:** Eliminates false positives from generic 128-bit UUIDs (e.g. Bluetooth GATT, database IDs) while accurately detecting actual API keys.
-- **📜 Git History Deep Scanner:** Uncovers secrets committed to previous commits even if removed in subsequent commits.
-- **⚡ Smart 1-Click Fix Engine:** Automatically patches vulnerable dependencies to verified safe versions, creates/updates `.gitignore`, and generates repository security files (`SECURITY.md`, `.github/dependabot.yml`).
-- **📊 Consolidated Vulnerability Reporting:** Merges multiple CVEs/GHSAs for a single dependency into one clean row in scan results.
+- **🧠 GitRisk SEI (Secret Intelligence Engine):** Completely replaces naive regex scanning with a hybrid evidential model that evaluates *why* a token exists, where it is located, and how likely it is to be a real credential.
+- **🗺️ Content Topology & Media Disambiguation:** Maps files into topological regions (Source Code, Comments, Config, Base64 Payloads, SVG Nodes, Lockfiles) to completely eliminate false positives from embedded raster image data.
+- **🧩 Token Reconstruction Engine:** Reassembles fragmented and split-string credentials (e.g. `"AIzaSy" + "..."` or template interpolations) before evaluation.
+- **🧪 Magic Byte Payload Inspector:** Decodes Base64 payloads to distinguish binary media headers (`\x89PNG`, `GIF`, `WOFF`) from genuine JWTs and encoded tokens.
+- **⚖️ Multi-Signal Evidence Scoring:** Uses signed positive and negative weights across Shannon entropy, syntactic context, variable bindings, and delimiters to compute a weighted confidence index [0 - 100].
+- **🔒 One-Way Secret Fingerprinting:** Generates non-reversible HMAC-SHA256 digests for cross-file and historical lifecycle correlation without ever storing plaintext secrets.
 
 ---
 
