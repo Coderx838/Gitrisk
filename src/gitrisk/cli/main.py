@@ -10,6 +10,7 @@ from gitrisk.cli.scan import scan_command
 from gitrisk.cli.db import db_app
 from gitrisk.cli.fix import fix_command
 from gitrisk.cli.report import report_command
+from gitrisk.cli.doc import doc_command
 from gitrisk.cli.banner import print_banner, print_version_banner
 
 console = Console()
@@ -106,6 +107,17 @@ def report(
 ) -> None:
     """Generate a report file from a scan."""
     report_command(path=path, output=output, fmt=format)
+
+
+@app.command("doc")
+def doc(
+    rule_id: str = typer.Argument(None, help="Rule ID to look up, e.g. HRD-001 or SEC-020"),
+    search: Optional[str] = typer.Option(None, "--search", "-s", help="Search rule descriptions by keyword"),
+    list_all: bool = typer.Option(False, "--list", "-l", help="List all available rule IDs"),
+) -> None:
+    """Look up detailed documentation for a GitRisk finding code (e.g. gitrisk doc HRD-001)."""
+    doc_command(rule_id=rule_id, search=search, list_all=list_all)
+
 
 
 if __name__ == "__main__":
